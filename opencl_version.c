@@ -14,7 +14,7 @@ Sources: http://www.eriksmistad.no/getting-started-with-opencl-and-gpu-computing
 
 
 
-#include <iostream>
+#include <stdio.h>
 #include <stdlib.h>
 
 
@@ -47,11 +47,11 @@ int main(int argc, char ** argv) {
 	char *kernelSource;
 	size_t kernelSize;
 
-	kernelFile = fopen("vecAddKernel.cl", "r");
+	kernelFile = fopen("kernel.cl", "r");
 
 	if (!kernelFile) {
 
-		fprintf(stderr, "No file named vecAddKernel.cl was found\n");
+		fprintf(stderr, "No file named kernel.cl was found\n");
 
 		exit(-1);
 
@@ -121,12 +121,12 @@ int main(int argc, char ** argv) {
 	// Test if correct answer
 	for (i=0; i<SIZE; ++i) {
 		if (C[i] != (A[i] + B[i])) {
-			cout<<"Something didn't work correctly! Failed test. \n";
+			printf("Something didn't work correctly! Failed test. \n");
 			break;
 		}
 	}
 	if (i == SIZE) {
-		cout<<"Everything seems to work fine! \n";
+		printf("Everything seems to work fine! \n");
 	}
 
 	// Clean up, release memory.
