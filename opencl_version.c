@@ -1,148 +1,148 @@
-/*
-
-Sources: http://www.eriksmistad.no/getting-started-with-opencl-and-gpu-computing/
-
-*/
-
-// openCL headers
-
-#ifdef __APPLE__
-#include <OpenCL/opencl.h>
-#else
-#include <CL/cl.h>
-#endif
-
-
-
 #include <stdio.h>
 #include <stdlib.h>
-
+#include <math.h>
+#include <CL/opencl.h>
 
 #define MAX_SOURCE_SIZE (0x100000)
 
+int main(int argc, char *argv[])
+{
+    // Length of vectors
+    unsigned int n = 100000;
 
+    // Host input vectors
+    double * A;
+    double * B;
+    // Host output vector
+    double * C;
 
-int main(int argc, char ** argv) {
+    // Device input buffers
+    cl_mem  mem_a;
+    cl_mem  mem_b;
+    // Device output buffer
+    cl_mem  mem_c;
 
-	int SIZE = 1024;
+    cl_platform_id cpPlatform; // OpenCL platform
+    cl_device_id device_id;    // device ID
+    cl_context context;        // context
+    cl_command_queue queue;    // command queue
+    cl_program program;        // program
+    cl_kernel kernel;          // kernel
 
-	// Allocate memories for input arrays and output array.
-	float *A = (float*)malloc(sizeof(float)*SIZE);
-	float *B = (float*)malloc(sizeof(float)*SIZE);
+    // Size, in bytes, of each vector
+    size_t bytes = n * sizeof(double);
 
-	// Output
-	float *C = (float*)malloc(sizeof(float)*SIZE);
+    // Allocate memory for each vector on host
+     A = (double *)malloc(bytes);
+     B = (double *)malloc(bytes);
+     C = (double *)malloc(bytes);
 
+    // Initialize vectors on host
+    int i;
+    for (i = 0; i < n; i++)
+    {
+         A[i] = i;
+         B[i] = i;
+    }
 
-	// Initialize values for array members.
-	int i = 0;
-	for (i=0; i<SIZE; ++i) {
-		A[i] = i+1;
-		B[i] = (i+1)*2;
-	}
+    //kernel----------------------------------------------
+    // Load the kernel source code into the array kernelSource
+    FILE *fp;
+    char *kernelSource;
+    size_t source_size;
 
-	// Load kernel from file vecAddKernel.cl
+    fp = fopen("kernel.cl", "r");
+    if (!fp)
+    {
+        fprintf(stderr, "Failed to load kernel.\n");
+        exit(1);
+    }
+    kernelSource = (char *)malloc(MAX_SOURCE_SIZE);
+    source_size = fread(kernelSource, 1, MAX_SOURCE_SIZE, fp);
+    fclose(fp);
+    //kernel----------------------------------------------
 
-	FILE *kernelFile;
-	char *kernelSource;
-	size_t kernelSize;
+    size_t globalSize, localSize;
+    cl_int err;
 
-	kernelFile = fopen("kernel.cl", "r");
+    // Number of work items in each local work group
+    localSize = 64;
 
-	if (!kernelFile) {
+    // Number of total work items - localSize must be devisor
+    globalSize = ceil(n / (float)localSize) * localSize;
 
-		fprintf(stderr, "No file named kernel.cl was found\n");
+    // Bind to platform
+    err = clGetPlatformIDs(1, &cpPlatform, NULL);
 
-		exit(-1);
+    // Get ID for the device
+    err = clGetDeviceIDs(cpPlatform, CL_DEVICE_TYPE_GPU, 1, &device_id, NULL);
 
-	}
-	kernelSource = (char*)malloc(MAX_SOURCE_SIZE);
-	kernelSize = fread(kernelSource, 1, MAX_SOURCE_SIZE, kernelFile);
-	fclose(kernelFile);
+    // Create a context
+    context = clCreateContext(0, 1, &device_id, NULL, NULL, &err);
 
-	// Getting platform and device information
-	cl_platform_id platformId = NULL;
-	cl_device_id deviceID = NULL;
-	cl_uint retNumDevices;
-	cl_uint retNumPlatforms;
-	cl_int ret = clGetPlatformIDs(1, &platformId, &retNumPlatforms);
-	ret = clGetDeviceIDs(platformId, CL_DEVICE_TYPE_DEFAULT, 1, &deviceID, &retNumDevices);
+    // Create a command queue
+    queue = clCreateCommandQueue(context, device_id, 0, &err);
 
-	// Creating context.
-	cl_context context = clCreateContext(NULL, 1, &deviceID, NULL, NULL,  &ret);
+    // Create the compute program from the source buffer
+    program = clCreateProgramWithSource(context, 1,
+                                        (const char **)&kernelSource, NULL, &err);
 
+    // Build the program executable
+    clBuildProgram(program, 0, NULL, NULL, NULL, NULL);
 
-	// Creating command queue
-	cl_command_queue commandQueue = clCreateCommandQueue(context, deviceID, 0, &ret);
+    // Create the compute kernel in the program we wish to run
+    kernel = clCreateKernel(program, "vecAdd", &err);
 
-	// Memory buffers for each array
-	cl_mem aMemObj = clCreateBuffer(context, CL_MEM_READ_ONLY, SIZE * sizeof(float), NULL, &ret);
-	cl_mem bMemObj = clCreateBuffer(context, CL_MEM_READ_ONLY, SIZE * sizeof(float), NULL, &ret);
-	cl_mem cMemObj = clCreateBuffer(context, CL_MEM_WRITE_ONLY, SIZE * sizeof(float), NULL, &ret);
+    // Create the input and output arrays in device memory for our calculation
+     mem_a = clCreateBuffer(context, CL_MEM_READ_ONLY, bytes, NULL, NULL);
+     mem_b = clCreateBuffer(context, CL_MEM_READ_ONLY, bytes, NULL, NULL);
+     mem_c = clCreateBuffer(context, CL_MEM_WRITE_ONLY, bytes, NULL, NULL);
 
+    // Write our data set into the input array in device memory
+    err = clEnqueueWriteBuffer(queue,  mem_a, CL_TRUE, 0,
+                               bytes,  A, 0, NULL, NULL);
+    err |= clEnqueueWriteBuffer(queue,  mem_b, CL_TRUE, 0,
+                                bytes,  B, 0, NULL, NULL);
 
-	// Copy lists to memory buffers
-	ret = clEnqueueWriteBuffer(commandQueue, aMemObj, CL_TRUE, 0, SIZE * sizeof(float), A, 0, NULL, NULL);;
-	ret = clEnqueueWriteBuffer(commandQueue, bMemObj, CL_TRUE, 0, SIZE * sizeof(float), B, 0, NULL, NULL);
+    // Set the arguments to our compute kernel
+    err = clSetKernelArg(kernel, 0, sizeof(cl_mem), & mem_a);
+    err |= clSetKernelArg(kernel, 1, sizeof(cl_mem), & mem_b);
+    err |= clSetKernelArg(kernel, 2, sizeof(cl_mem), & mem_c);
+    err |= clSetKernelArg(kernel, 3, sizeof(unsigned int), &n);
 
-	// Create program from kernel source
-	cl_program program = clCreateProgramWithSource(context, 1, (const char **)&kernelSource, (const size_t *)&kernelSize, &ret);
+    // Execute the kernel over the entire range of the data set
+    err = clEnqueueNDRangeKernel(queue, kernel, 1, NULL, &globalSize, &localSize,
+                                 0, NULL, NULL);
 
-	// Build program
-	ret = clBuildProgram(program, 1, &deviceID, NULL, NULL, NULL);
+    // Wait for the command queue to get serviced before reading back results
+    clFinish(queue);
 
-	// Create kernel
-	cl_kernel kernel = clCreateKernel(program, "addVectors", &ret);
+    // Read the results from the device
+    clEnqueueReadBuffer(queue,  mem_c, CL_TRUE, 0,
+                        bytes,  C, 0, NULL, NULL);
 
+    //Sum up vector c and print result divided by n, this should equal 1 within error
+    double sum = 0;
+    for (i = 0; i < n; i++)
+    {
+        printf("%f + %f = %f\n",  A[i],  B[i],  C[i]);
+        sum +=  C[i];
+    }
+    printf("final result: %f\n", sum / n);
 
-	// Set arguments for kernel
-	ret = clSetKernelArg(kernel, 0, sizeof(cl_mem), (void *)&aMemObj);
-	ret = clSetKernelArg(kernel, 1, sizeof(cl_mem), (void *)&bMemObj);
-	ret = clSetKernelArg(kernel, 2, sizeof(cl_mem), (void *)&cMemObj);
+    // release OpenCL resources
+    clReleaseMemObject( mem_a);
+    clReleaseMemObject( mem_b);
+    clReleaseMemObject( mem_c);
+    clReleaseProgram(program);
+    clReleaseKernel(kernel);
+    clReleaseCommandQueue(queue);
+    clReleaseContext(context);
 
+    //release host memory
+    free(A);
+    free(B);
+    free( C);
 
-	// Execute the kernel
-	size_t globalItemSize = SIZE;
-	size_t localItemSize = 64; // globalItemSize has to be a multiple of localItemSize. 1024/64 = 16
-	ret = clEnqueueNDRangeKernel(commandQueue, kernel, 1, NULL, &globalItemSize, &localItemSize, 0, NULL, NULL);
-
-	// Read from device back to host.
-	ret = clEnqueueReadBuffer(commandQueue, cMemObj, CL_TRUE, 0, SIZE * sizeof(float), C, 0, NULL, NULL);
-
-	// Write result
-	/*
-	for (i=0; i<SIZE; ++i) {
-
-		printf("%f + %f = %f\n", A[i], B[i], C[i]);
-
-	}
-	*/
-
-	// Test if correct answer
-	for (i=0; i<SIZE; ++i) {
-		if (C[i] != (A[i] + B[i])) {
-			printf("Something didn't work correctly! Failed test. \n");
-			break;
-		}
-	}
-	if (i == SIZE) {
-		printf("Everything seems to work fine! \n");
-	}
-
-	// Clean up, release memory.
-	ret = clFlush(commandQueue);
-	ret = clFinish(commandQueue);
-	ret = clReleaseCommandQueue(commandQueue);
-	ret = clReleaseKernel(kernel);
-	ret = clReleaseProgram(program);
-	ret = clReleaseMemObject(aMemObj);
-	ret = clReleaseMemObject(bMemObj);
-	ret = clReleaseMemObject(cMemObj);
-	ret = clReleaseContext(context);
-	free(A);
-	free(B);
-	free(C);
-
-	return 0;
-
-	}
+    return 0;
+}

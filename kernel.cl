@@ -1,7 +1,11 @@
-__kernel void addVectors(__global const float *a, 
-	__global const float *b,
-	__global float *c) {
-		
-		int gid = get_global_id(0);
-		c[gid] = a[gid] + b[gid];
-	}
+// OpenCL kernel. Each work item takes care of one element of c
+#pragma OPENCL EXTENSION cl_khr_fp64 : enable
+__kernel void vecAdd(__global double *a, __global double *b, __global double *c,
+                     const unsigned int n) {
+  // Get our global thread ID
+  int id = get_global_id(0);
+
+  // Make sure we do not go out of bounds
+  if (id < n)
+    c[id] = a[id] + b[id];
+}
