@@ -9,10 +9,28 @@ __kernel void ThreeDimArray(const __global float *const input1,
   const int max_x = get_global_size(0);
   const int max_y = get_global_size(1);
   const int max_z = get_global_size(2);
+  // const int idx = x * max_y * max_z + y * max_z + z;
+  // const int idx = x * max_y * max_z + y * max_z + z;
+  // const int idx = x * max_y * max_z + y * max_z + z;
   const int idx = x * max_y * max_z + y * max_z + z;
-  output1[idx] = x;
-  output2[idx] = y;
-  output3[idx] = z;
+  output1[idx] = idx;
+  // printf("output_1: %d \n",output1);
+  // printf("x: %d \n",x);
+  // printf("max_x: %d \n",max_x);
+  
+  // const int last_x = 255;
+  // const int last_y = 511;
+  // const int last_z = 767;
+  // if(idx <= last_x){
+  //   output1[idx] = idx/idx+1;
+  // }else if(idx > last_x && idx <= last_y){
+  //   output1[idx] = 1.00;
+  // }else if(idx > last_y && idx <= last_z){
+  //   output1[idx] = idx/idx+1;
+  // }
+  
+  // output2[idx] = y;
+  // output3[idx] = z;
   
   // Uncommnet the next line if you want to see the input values used.
   // output1[idx] = input1[idx] + input2[idx];
@@ -44,3 +62,17 @@ __kernel void ThreeDimArray(const __global float *const input1,
 //     int idx = i + dim1 * j + dim1 * dim2 * k;
 //     c[idx] = idx;
 // }
+
+
+// __kernel void ThreeDimArray(__global float *const output1) {
+//   const int x = get_global_id(0);
+//   const int y = get_global_id(1);
+//   const int z = get_global_id(2);
+//   const int max_x = get_global_size(0);
+//   const int max_y = get_global_size(1);
+//   const int max_z = get_global_size(2);
+  
+//   const int idx = x * max_y * max_z + y * max_z + z;
+
+//   output1[idx] = 1.00;
+// };

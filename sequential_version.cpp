@@ -1,7 +1,6 @@
 #include <stdio.h>
 #include <math.h>
 #include <time.h>
-#include <chrono>
 
 const int depth = 3;
 const int row = 8192; //8192
@@ -10,15 +9,15 @@ const int column = 8192;
 float A[depth][row][column];
 
 
-void showTimeDifference(auto t1, auto t2){
+void showTimeDifference(clock_t t1, clock_t t2){
 	// auto start = chrono::high_resolution_clock::now();
-    double timeTaken = std::chrono::duration<double>(t2 - t1).count();
+    double timeTaken = double(t2 - t1)/CLOCKS_PER_SEC;;
 	printf("========================= Time taken = %.3f s ==========================", timeTaken);
 }
 
 int main()
 {
-	auto s_t1 = std::chrono::high_resolution_clock::now();
+	clock_t s_t1 = clock();
 	//loop to fill in every row
 	for (int k = 0; k < depth; k++)
 	{
@@ -84,7 +83,7 @@ int main()
 		}
 		// printf("\n");
 	}
-	auto s_t2 = std::chrono::high_resolution_clock::now();
+	clock_t s_t2 = clock();
 	// showing total time taken to sequential executation
 	printf("Sequential Code: \n");
 	showTimeDifference(s_t1, s_t2);

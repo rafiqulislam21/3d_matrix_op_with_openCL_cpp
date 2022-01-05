@@ -3,6 +3,9 @@
 #include <sstream>
 #include <string>
 #include <math.h>
+#include <time.h>
+#include <chrono>
+
 #include <CL/cl.h>
 
 const unsigned int depth  =     3; //Different dimensions on each axis makes the indices esier to identify.
@@ -15,6 +18,12 @@ cl_float input2[depth][row][column];
 cl_float output1[depth][row][column];
 cl_float output2[depth][row][column];
 cl_float output3[depth][row][column];
+
+
+void showTimeDifference(clock_t t1, clock_t t2){
+    double timeTaken = double(t2 - t1)/CLOCKS_PER_SEC;;
+	  printf("========================= Time taken = %.3f s ==========================\n", timeTaken);
+}
 
 inline void errorCheck(cl_int err, const char * name){
   if(err != CL_SUCCESS){
@@ -45,15 +54,6 @@ int main(int argc, char** argv){
   cl_mem outputCLBuffer3;
   char buffer[10240];
   
-
-  //==========load kernel ===========================================================================
-  // Load the kernel source code into the array kernel_source
-  std::ifstream kernel_file("kernel.cl");
-  std::string k_src(std::istreambuf_iterator<char>(kernel_file), (std::istreambuf_iterator<char>()));
-  const char* kernel_source = k_src.data();	
-  //==========load kernel ===========================================================================
-  
-
   for (unsigned int i = 0; i < depth; ++i){
     for (unsigned int j = 0; j < row; ++j){
       for (unsigned int k = 0; k < column; ++k){
@@ -62,6 +62,16 @@ int main(int argc, char** argv){
       }
     }
   }
+
+
+  clock_t s_t1 = clock();
+  //==========load kernel ===========================================================================
+  // Load the kernel source code into the array kernel_source
+  std::ifstream kernel_file("kernel.cl");
+  std::string k_src(std::istreambuf_iterator<char>(kernel_file), (std::istreambuf_iterator<char>()));
+  const char* kernel_source = k_src.data();	
+  //==========load kernel ===========================================================================
+  
   
   error_no = clGetPlatformIDs(0, NULL, &num_of_platforms);
   errorCheck((error_no != CL_SUCCESS) ? error_no : (num_of_platforms <= 0 ? -1 : CL_SUCCESS), "clGetPlatformIDs");
@@ -171,7 +181,13 @@ int main(int argc, char** argv){
 				sizeof(cl_float) * depth * row * column,
 				output3, 0, NULL, NULL);
   errorCheck(error_no, "clEnqueueReadBuffer - 3");
-  
+
+  clock_t s_t2 = clock();
+  // showing total time taken to sequential executation
+	printf("OpenCL Code: \n");
+	showTimeDifference(s_t1, s_t2);
+
+
   std::ofstream fout("output.txt");
   for (int x = 0; x < depth; x++){
     for (int y = 0; y < row; y++){
