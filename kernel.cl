@@ -1,8 +1,4 @@
-__kernel void ThreeDimArray(const __global float *const input1,
-                            const __global float *const input2,
-                            __global float *const output1,
-                            __global float *const output2,
-                            __global float *const output3) {
+__kernel void ThreeDimArray(__global float *const output1) {
   const int x = get_global_id(0);
   const int y = get_global_id(1);
   const int z = get_global_id(2);
