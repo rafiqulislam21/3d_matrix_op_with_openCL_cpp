@@ -7,24 +7,60 @@
 
 #include <CL/cl.h>
 
-const unsigned int depth  =     3; //Different dimensions on each axis makes the indices esier to identify.
-const unsigned int row  =     8192; //8192
-const unsigned int column =    8192; //8192
+const unsigned int depth = 3;     //Different dimensions on each axis makes the indices esier to identify.
+const unsigned int row = 8;       //8192
+const unsigned int column = 8;    //8192
 
-// cl_float input1[depth][row][column];
-// cl_float input2[depth][row][column];
-
-// Host output matrix
-cl_float A[depth][row][column];
-// cl_float output2[depth][row][column];
-// cl_float output3[depth][row][column];
+float A_seq[depth][row][column];  // sequential output matrix A
+cl_float A[depth][row][column];   // OpenCL Host output matrix A
 
 //==========================================================================================================================
 //----------------------------------Helper functions------------------------------------------------------------------------
 //==========================================================================================================================
-void showTimeDifference(clock_t t1, clock_t t2){
-    double timeTaken = double(t2 - t1)/CLOCKS_PER_SEC;;
-	  printf("========================= Time taken = %.3f s ==========================\n", timeTaken);
+double showTimeDifference(clock_t t1, clock_t t2){
+    double timeDifference = double(t2 - t1)/CLOCKS_PER_SEC;;
+	  printf("========================= Time taken %.4f s ==========================\n\n", timeDifference);
+
+    return timeDifference;
+}
+
+void displayMatrix(float (*MAT)[row][column]){
+  //Display matrix ------------------------------------------------------
+	for (int k = 0; k < depth; k++){
+		printf("Baseline matrix k = %d (i=0..10, j =0..10):\n", k);
+		//each row
+    for (int i = 0; i < row; i++){
+			//each column
+			for (int j = 0; j < column; j++){
+				printf("%f \t", MAT[k][i][j]);
+			}
+			printf("\n");
+		}
+		printf("\n");
+	}
+}
+
+void checkValidity(float (*MAT_A)[row][column], float (*MAT_B)[row][column]){
+  //check matrix validity------------------------------------------------------
+  bool isSame = true;
+	for (int k = 0; k < depth; k++){
+		//each row
+    for (int i = 0; i < row; i++){
+			//each column
+			for (int j = 0; j < column; j++){
+				if(MAT_A[k][i][j] != MAT_B[k][i][j]){
+          isSame = false;
+        }
+			}
+		}
+	}
+
+  if(isSame == true){
+    printf("Matrix validition Successful!\nBoth matrix contains same elements.");
+  }else{
+    printf("Matrix validition Failed!\nBoth matrix contains different elements.");
+  }
+  
 }
 
 inline void errorCheck(cl_int err, const char * name){
@@ -49,47 +85,36 @@ void CL_CALLBACK contextCallbackFnct(const char * err_info, const void * private
 //==========================================================================================================================
 //----------------------------------Sequential code-------------------------------------------------------------------------
 //==========================================================================================================================
-void SequentialCode(){
+void Sequential_code(){
   printf("Sequential code start executing......\n");
-  clock_t s_t1 = clock();
-	//loop to fill in every row
+  
+  //Filling matrix with values-------------------------------------------
+	//loop to fill in each 2D matrix
 	for (int k = 0; k < depth; k++){
-		//loop to fill in every column
+		//loop to fill in every row
 		for (int i = 0; i < row; i++){
-			//loop to fill in each 2D matrix
+			//loop to fill in every column
 			for (int j = 0; j < column; j++){
 				//for matrix k=0
 				if (k == 0){
-					A[k][i][j] = (float)i / ((float)j + 1.00);
+					A_seq[k][i][j] = (float)i / ((float)j + 1.00);
 				}
 				//for matrix k=1
 				else if (k == 1){
-					A[k][i][j] = 1.00;
+					A_seq[k][i][j] = 1.00;
 				}
 				//for matrix k=2
 				else{
-					A[k][i][j] = (float)j / ((float)i + 1.00);
+					A_seq[k][i][j] = (float)j / ((float)i + 1.00);
 				}
 			}
 		}
 	}
 
-	//Display array====================================================================================
-	// for (int k = 0; k < depth; k++){
-	// 	printf("Baseline matrix k = %d (i=0..10, j =0..10):\n", k);
-	// 	for (int i = 0; i < row; i++){
-	// 		//each column
-	// 		for (int j = 0; j < column; j++){
-	// 			//only matrix k=1 is updated
-	// 			printf("%.2f \t", A[k][i][j]);
-	// 		}
-	// 		printf("\n");
-	// 	}
-	// 	printf("\n");
-	// }
-	//Display array=======================================================================================
+	//Display matrix ------------------------------------------------------
+  displayMatrix(A_seq);
 
-	//Iteration count
+	//Iteration count------------------------------------------------------
 	for (int t = 0; t < 24; t++){
 		// printf("Iteration = %d :\n", t);
 		//each row - beware first row and last row not to be updated therefore from 1...8190
@@ -97,17 +122,14 @@ void SequentialCode(){
 			//each column
 			for (int j = 0; j < column; j++){
 				//only matrix k=1 is updated
-				A[1][i][j] = A[1][i][j] + (1 / (sqrt(A[0][i + 1][j] + A[2][i - 1][j])));
+				A_seq[1][i][j] = A_seq[1][i][j] + (1 / (sqrt(A[0][i + 1][j] + A_seq[2][i - 1][j])));
 				// printf("%.2f \t", A[1][i][j]);
 			}
 			// printf("\n");
 		}
 		// printf("\n");
 	}
-	clock_t s_t2 = clock();
-	// showing total time taken to sequential executation
-	printf("Sequential Code: \n");
-	showTimeDifference(s_t1, s_t2);
+
   printf("Sequential code execution finished!\n");
 }
 
@@ -117,11 +139,12 @@ void SequentialCode(){
 
 
 
-int main(int argc, char** argv){
-  //calling sequential code-------------------
-  SequentialCode();
 
-  //OpenCL code start-------------------------
+
+//==========================================================================================================================
+//----------------------------------OpenCL code-----------------------------------------------------------------------------
+//==========================================================================================================================
+void OpenCL_code(){
   printf("Opencl code start executing......\n");
   cl_int error_no;
   cl_uint num_of_platforms;
@@ -132,27 +155,13 @@ int main(int argc, char** argv){
   cl_command_queue command_queue;   // command queue
   cl_program program;               // program
   cl_kernel kernel;                 // kernel
-  // cl_mem inputCLBuffer1;
-  // cl_mem inputCLBuffer2;
 
   // Device output buffer
   cl_mem outputCLBuffer1;
   
-  // cl_mem outputCLBuffer2;
-  // cl_mem outputCLBuffer3;
   char buffer[10240];
+
   
-  // for (unsigned int i = 0; i < depth; ++i){
-  //   for (unsigned int j = 0; j < row; ++j){
-  //     for (unsigned int k = 0; k < column; ++k){
-	//       input1[i][j][k] = 100.0f; //Some values very different from the indices
-	//       input2[i][j][k] = 101.0f;
-  //     }
-  //   }
-  // }
-
-
-  clock_t s_t1 = clock();
   // Load the kernel source code into the array kernel_source
   std::ifstream kernel_file("kernel.cl");
   std::string k_src(std::istreambuf_iterator<char>(kernel_file), (std::istreambuf_iterator<char>()));
@@ -210,31 +219,11 @@ int main(int argc, char** argv){
   kernel = clCreateKernel(program, "ThreeDimArray", &error_no);
   errorCheck(error_no, "clCreateKernel");
     
-  // inputCLBuffer1 = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, 
-	// 			sizeof(cl_float) * depth * row * column,
-	// 			static_cast<void *>(input1), &error_no);
-  // errorCheck(error_no, "clCreateBuffer(input1)");
-  
-  // inputCLBuffer2 = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
-	// 			sizeof(cl_float) * depth * row * column,
-	// 			static_cast<void *>(input2), &error_no);
-  // errorCheck(error_no, "clCreateBuffer(input2)");
-  
   // Create the input and output arrays in device memory for our calculation
   outputCLBuffer1 = clCreateBuffer(context, CL_MEM_WRITE_ONLY,
 				 sizeof(cl_float) * depth * row * column,
 				 NULL, &error_no);
   errorCheck(error_no, "clCreateBuffer(A)");
-  
-  // outputCLBuffer2 = clCreateBuffer(context, CL_MEM_WRITE_ONLY,
-	// 			 sizeof(cl_float) * depth * row * column,
-	// 			 NULL, &error_no);
-  // errorCheck(error_no, "clCreateBuffer(output2)");
-  
-  // outputCLBuffer3 = clCreateBuffer(context, CL_MEM_WRITE_ONLY,
-	// 			 sizeof(cl_float) * depth * row * column,
-	// 			 NULL, &error_no);
-  // errorCheck(error_no, "clCreateBuffer(output3)");
   
   // Create a command queue
   command_queue = clCreateCommandQueue(context, device_ids[0], 0, &error_no);
@@ -242,11 +231,7 @@ int main(int argc, char** argv){
   
 
   // Set the arguments to our compute kernel
-  // error_no  = clSetKernelArg(kernel, 0, sizeof(cl_mem), &inputCLBuffer1);
-  // error_no |= clSetKernelArg(kernel, 1, sizeof(cl_mem), &inputCLBuffer2);
   error_no  = clSetKernelArg(kernel, 0, sizeof(cl_mem), &outputCLBuffer1);
-  // error_no |= clSetKernelArg(kernel, 1, sizeof(cl_mem), &outputCLBuffer2);
-  // error_no |= clSetKernelArg(kernel, 2, sizeof(cl_mem), &outputCLBuffer3);
   errorCheck(error_no, "clSetKernelArg");
   
   const size_t globalWorkSize[3] = {depth, row, column};
@@ -269,15 +254,6 @@ int main(int argc, char** argv){
 				sizeof(cl_float) * depth * row * column,
 				A, 0, NULL, NULL);
   errorCheck(error_no, "clEnqueueReadBuffer - 1");
-  // error_no = clEnqueueReadBuffer( command_queue, outputCLBuffer2, CL_TRUE, 0,
-	// 			sizeof(cl_float) * depth * row * column,
-	// 			output2, 0, NULL, NULL);
-  // errorCheck(error_no, "clEnqueueReadBuffer - 2");
-  // error_no = clEnqueueReadBuffer( command_queue, outputCLBuffer3, CL_TRUE, 0,
-	// 			sizeof(cl_float) * depth * row * column,
-	// 			output3, 0, NULL, NULL);
-  // errorCheck(error_no, "clEnqueueReadBuffer - 3");
-
 
   //todo-----------------------
   // // release OpenCL resources
@@ -290,26 +266,47 @@ int main(int argc, char** argv){
 	// //release host memory
 	// free(A);
 
-  clock_t s_t2 = clock();
-  // showing total time taken to sequential executation
-	printf("OpenCL Code: \n");
-	showTimeDifference(s_t1, s_t2);
-
-
-  std::ofstream fout("output.txt");
-  for (int x = 0; x < depth; x++){
-    for (int y = 0; y < row; y++){
-      for (int z = 0; z < column; z++){
-		fout << A[x][y][z] << " ";
-      }	
-      fout << std::endl;
-    }
-    fout << std::endl;
-  }
-  fout <<  "***********************************\n" << std::endl;
-  fout.close();
-
   printf("OpenCL code execution finished!\n");
+
+  // std::ofstream fout("output.txt");
+  // for (int x = 0; x < depth; x++){
+  //   for (int y = 0; y < row; y++){
+  //     for (int z = 0; z < column; z++){
+	// 	fout << A[x][y][z] << " ";
+  //     }	
+  //     fout << std::endl;
+  //   }
+  //   fout << std::endl;
+  // }
+  // fout <<  "***********************************\n" << std::endl;
+  // fout.close();
+}
+
+//==========================================================================================================================
+//----------------------------------OpenCL code-----------------------------------------------------------------------------
+//==========================================================================================================================
+
+
+
+int main(int argc, char** argv){
+  
+  //sequential code------------------------------------------------------
+  clock_t seq_t1 = clock();           //taking start time of execution
+  Sequential_code();
+  clock_t seq_t2 = clock();           //taking end time of execution
+	// printf("Sequential Code: \n");
+	double seq_time = showTimeDifference(seq_t1, seq_t2); //calculate time difference for sequential executation
+
+  
+  //OpenCL code----------------------------------------------------------
+  clock_t opn_t1 = clock();           //taking start time of OpenCL execution
+  OpenCL_code();
+  clock_t opn_t2 = clock();           //taking end time of OpenCL execution
+	// printf("OpenCL Code: \n");
+	double openCl_time = showTimeDifference(opn_t1, opn_t2); //calculate time difference for OpenCl parallel executation
+
+
+  //performance calculation----------------------------------------------
 
   return(0);
 }
