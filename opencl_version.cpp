@@ -8,8 +8,8 @@
 #include <CL/cl.h>
 
 const unsigned int depth = 3;     //Different dimensions on each axis makes the indices esier to identify.
-const unsigned int row = 8;       //8192
-const unsigned int column = 8;    //8192
+const unsigned int row = 8192;       //8192
+const unsigned int column = 8192;    //8192
 
 float A_seq[depth][row][column];  // sequential output matrix A
 cl_float A[depth][row][column];   // OpenCL Host output matrix A
@@ -32,7 +32,7 @@ void displayMatrix(float (*MAT)[row][column]){
     for (int i = 0; i < row; i++){
 			//each column
 			for (int j = 0; j < column; j++){
-				printf("%f \t", MAT[k][i][j]);
+				printf("%f \t", MAT[1][i][j]);
 			}
 			printf("\n");
 		}
@@ -49,6 +49,8 @@ void checkValidity(float (*MAT_A)[row][column], float (*MAT_B)[row][column]){
 			//each column
 			for (int j = 0; j < column; j++){
 				if(MAT_A[k][i][j] != MAT_B[k][i][j]){
+          // printf("mat seq = %f\n", MAT_A[k][i][j]);
+          // printf("mat opem = %f\n", MAT_B[k][i][j]);
           isSame = false;
         }
 			}
@@ -56,9 +58,9 @@ void checkValidity(float (*MAT_A)[row][column], float (*MAT_B)[row][column]){
 	}
 
   if(isSame == true){
-    printf("Matrix validition Successful!\nBoth matrix contains same elements.");
+    printf("Matrix validition Successful!\n\n");
   }else{
-    printf("Matrix validition Failed!\nBoth matrix contains different elements.");
+    printf("Matrix validition Failed!\n\n");
   }
   
 }
@@ -111,9 +113,6 @@ void Sequential_code(){
 		}
 	}
 
-	//Display matrix ------------------------------------------------------
-  displayMatrix(A_seq);
-
 	//Iteration count------------------------------------------------------
 	for (int t = 0; t < 24; t++){
 		// printf("Iteration = %d :\n", t);
@@ -122,7 +121,7 @@ void Sequential_code(){
 			//each column
 			for (int j = 0; j < column; j++){
 				//only matrix k=1 is updated
-				A_seq[1][i][j] = A_seq[1][i][j] + (1 / (sqrt(A[0][i + 1][j] + A_seq[2][i - 1][j])));
+				A_seq[1][i][j] = A_seq[1][i][j] + (1 / (sqrt(A_seq[0][i + 1][j] + A_seq[2][i - 1][j])));
 				// printf("%.2f \t", A[1][i][j]);
 			}
 			// printf("\n");
@@ -130,13 +129,15 @@ void Sequential_code(){
 		// printf("\n");
 	}
 
+  //Display matrix ------------------------------------------------------
+  // displayMatrix(A_seq);
+
   printf("Sequential code execution finished!\n");
 }
 
 //==========================================================================================================================
 //----------------------------------Sequential code-------------------------------------------------------------------------
 //==========================================================================================================================
-
 
 
 
@@ -157,7 +158,7 @@ void OpenCL_code(){
   cl_kernel kernel;                 // kernel
 
   // Device output buffer
-  cl_mem outputCLBuffer1;
+  cl_mem memBufferA;
   
   char buffer[10240];
 
@@ -170,7 +171,7 @@ void OpenCL_code(){
   // Bind to platform
   error_no = clGetPlatformIDs(0, NULL, &num_of_platforms);
   errorCheck((error_no != CL_SUCCESS) ? error_no : (num_of_platforms <= 0 ? -1 : CL_SUCCESS), "clGetPlatformIDs");
-  printf("=== %d OpenCL platform(s) found: ===\n", num_of_platforms);
+  printf("** %d OpenCL platform(s) found: \n", num_of_platforms);
   
   platform_ids = (cl_platform_id *)alloca(sizeof(cl_platform_id) * num_of_platforms);
   error_no = clGetPlatformIDs(num_of_platforms, platform_ids, NULL);
@@ -180,9 +181,9 @@ void OpenCL_code(){
   device_ids = NULL;
   cl_uint i = 0;
   clGetPlatformInfo(platform_ids[i], CL_PLATFORM_NAME, 10240, buffer, NULL);
-  printf("  NAME = %s\n", buffer);
+  printf("\tNAME = %s\n", buffer);
   error_no = clGetDeviceIDs(platform_ids[i], CL_DEVICE_TYPE_GPU, 1, NULL, &num_of_devices);
-  printf("=== %d OpenCL devices: ===\n", num_of_devices);
+  printf("** %d OpenCL devices: \n", num_of_devices);
     
   if (error_no != CL_SUCCESS && error_no != CL_DEVICE_NOT_FOUND){
     errorCheck(error_no, "clGetDeviceIDs");
@@ -213,14 +214,14 @@ void OpenCL_code(){
   error_no = clBuildProgram(program, num_of_devices, device_ids, NULL, NULL, NULL);
   errorCheck(error_no, "clBuildProgram");
   clGetProgramBuildInfo(program, *device_ids, CL_PROGRAM_BUILD_LOG, sizeof(buffer), buffer, NULL);
-  fprintf(stderr, "CL Kernel Compilation:\n %s \n", buffer);
+  fprintf(stderr, "\tCL Kernel Compilation:\n %s \n", buffer);
   
   // Create the compute kernel in the program we wish to run
   kernel = clCreateKernel(program, "ThreeDimArray", &error_no);
   errorCheck(error_no, "clCreateKernel");
     
   // Create the input and output arrays in device memory for our calculation
-  outputCLBuffer1 = clCreateBuffer(context, CL_MEM_WRITE_ONLY,
+  memBufferA = clCreateBuffer(context, CL_MEM_WRITE_ONLY,
 				 sizeof(cl_float) * depth * row * column,
 				 NULL, &error_no);
   errorCheck(error_no, "clCreateBuffer(A)");
@@ -231,7 +232,7 @@ void OpenCL_code(){
   
 
   // Set the arguments to our compute kernel
-  error_no  = clSetKernelArg(kernel, 0, sizeof(cl_mem), &outputCLBuffer1);
+  error_no  = clSetKernelArg(kernel, 0, sizeof(cl_mem), &memBufferA);
   errorCheck(error_no, "clSetKernelArg");
   
   const size_t globalWorkSize[3] = {depth, row, column};
@@ -249,22 +250,27 @@ void OpenCL_code(){
 				  NULL,
 				  NULL);
   errorCheck(error_no, "clEnqueueNDRangeKernel");
-    
-  error_no = clEnqueueReadBuffer( command_queue, outputCLBuffer1, CL_TRUE, 0,
+
+  // Wait for the command queue to get serviced before reading back results
+	clFinish(command_queue);
+
+  // Read the results from the device  
+  error_no = clEnqueueReadBuffer( command_queue, memBufferA, CL_TRUE, 0,
 				sizeof(cl_float) * depth * row * column,
 				A, 0, NULL, NULL);
   errorCheck(error_no, "clEnqueueReadBuffer - 1");
 
-  //todo-----------------------
-  // // release OpenCL resources
-	// clReleaseMemObject(mem_a);
-	// clReleaseProgram(program);
-	// clReleaseKernel(kernel);
-	// clReleaseCommandQueue(queue);
-	// clReleaseContext(context);
-
-	// //release host memory
+  // release OpenCL resources
+	clReleaseMemObject(memBufferA);
+	clReleaseProgram(program);
+	clReleaseKernel(kernel);
+	clReleaseCommandQueue(command_queue);
+	clReleaseContext(context);
+	//release host memory
 	// free(A);
+
+  //Display matrix ------------------------------------------------------
+  // displayMatrix(A);
 
   printf("OpenCL code execution finished!\n");
 
@@ -306,7 +312,12 @@ int main(int argc, char** argv){
 	double openCl_time = showTimeDifference(opn_t1, opn_t2); //calculate time difference for OpenCl parallel executation
 
 
+  //matrix validation----------------------------------------------------
+  checkValidity(A_seq, A);
+
   //performance calculation----------------------------------------------
+  double speedUp = seq_time/openCl_time;
+  printf("Speed up: %.2f \n", speedUp);
 
   return(0);
 }

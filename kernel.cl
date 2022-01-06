@@ -2,58 +2,67 @@ __kernel void ThreeDimArray(__global float *const A) {
   const int k = get_global_id(0);
   const int i = get_global_id(1);
   const int j = get_global_id(2);
-  //const int depth  = get_global_size(0); // unused here
-  const int row    = get_global_size(1);
+  // const int depth  = get_global_size(0); // unused here
+  const int row = get_global_size(1);
   const int column = get_global_size(2);
-  
-  const int idx = k * row * column + i * column + j; // linear index to access matrix A in 1D form
 
-  if(k == 0) {
-      A[idx] = (float)i / ((float)j + 1.00f);
-  } else if(k == 1) {
-      A[idx] = 1.00;
-  } else {
-      A[idx] = (float)j / ((float)i + 1.00f);
+  //   const int idx = k * row * column + i * column + j; // linear index to
+  //   access matrix A in 1D form
+  // matrix initialization part
+  //   if (k == 0) {
+  //     A[idx] = (float)i / ((float)j + 1.00);
+  //   } else if (k == 1) {
+  //     A[idx] = 1.00;
+  //   } else {
+  //     A[idx] = (float)j / ((float)i + 1.00);
+  //   }
+
+  const int idk0 = 0 * row * column + i * column + j; // indexes for k=0
+  const int idk1 = 1 * row * column + i * column + j; // indexes for k=1
+  const int idk2 = 2 * row * column + i * column + j; // indexes for k=2
+  
+  A[idk0] = (float)i / ((float)j + 1.00);
+  A[idk1] = 1.00;
+  A[idk2] = (float)j / ((float)i + 1.00);
+  
+
+  barrier(CLK_GLOBAL_MEM_FENCE);
+
+  // iteration part
+  if(i != 0 && i != row){
+    const int idk0i1 = 0 * row * column + (i+1) * column + j; // indexes for k=0 and i+1
+    const int idk2i1 = 2 * row * column + (i-1) * column + j; // indexes for k=2 and i-1
+    for (int t = 0; t < 24; t++) {
+      // A_seq[1][i][j] = A_seq[1][i][j] + (1 / (sqrt(A_seq[0][i + 1][j] + A_seq[2][i - 1][j])));
+      A[idk1] = A[idk1] + (float)(1 / (native_sqrt(A[idk0i1] + A[idk2i1])));
+    }
   }
+  
 };
 
-
-// // OpenCL kernel. Each work item takes care of one element of c
-// #pragma OPENCL EXTENSION cl_khr_fp64 : enable
-// __kernel void vecAdd(__global double *a, __global double *b, __global double *c,
-//                      const unsigned int n) {
-//   // Get our global thread ID
-//   int id = get_global_id(0);
-
-//   // Make sure we do not go out of bounds
-//   if (id < n)
-//     c[id] = a[id] + b[id];
-// }
-
-
-// __kernel void matrix(__global double *c, const unsigned int dim1,
-//                      const unsigned int dim2) {
-//   // Get our global thread ID
-//   int i = get_global_id(0);
-//   int j = get_global_id(1);
-//   int k = get_global_id(2);
-
-//   // Make sure we do not go out of bounds
-//   if (id < n)
-//     int idx = i + dim1 * j + dim1 * dim2 * k;
-//     c[idx] = idx;
-// }
-
-
-// __kernel void ThreeDimArray(__global float *const output1) {
-//   const int x = get_global_id(0);
-//   const int y = get_global_id(1);
-//   const int z = get_global_id(2);
-//   const int max_x = get_global_size(0);
-//   const int max_y = get_global_size(1);
-//   const int max_z = get_global_size(2);
-  
-//   const int idx = x * max_y * max_z + y * max_z + z;
-
-//   output1[idx] = 1.00;
+// optimized kernel
+// __kernel void ThreeDimArray(__global float *A, const int depth, const int
+// row,
+//                             const int column) {
+//   const int idx = get_global_id(0); // 1D kernel range is depth*row*column
+//   const int t = n % (column * row), j = t % column, i = t / column,
+//             k = n / (column * row);
+//   A[idx] = k == 0   ? (float)i / ((float)j + 1.0f)
+//            : k == 1 ? 1.0f
+//                     : (float)j / ((float)i + 1.0f);
 // };
+
+// Thanks again. One more thing. If we want to change a specific index's value
+// then how should we do that? I have tried but couldn't solve that.
+
+// for example:
+
+// for (int t = 0; t < 24; t++){
+// 		for (int i = 1; i < row; i++){
+// 			for (int j = 0; j < column; j++){
+// 				//only matrix k=1 is updated
+// 				A[1][i][j] = A[1][i][j] + (1 / (sqrt(A[0][i + 1][j]
+// + A[2][i - 1][j])));
+// 			}
+// 		}
+// 	}
