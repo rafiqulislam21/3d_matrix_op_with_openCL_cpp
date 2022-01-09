@@ -8,8 +8,8 @@
 #include <CL/cl.h>
 
 const unsigned int depth = 3;     //Different dimensions on each axis makes the indices esier to identify.
-const unsigned int row = 8192;       //8192
-const unsigned int column = 8192;    //8192
+const unsigned int row = 8;       //8192
+const unsigned int column = 8;    //8192
 
 float A_seq[depth][row][column];  // sequential output matrix A
 cl_float A[depth][row][column];   // OpenCL Host output matrix A
@@ -32,7 +32,7 @@ void displayMatrix(float (*MAT)[row][column]){
     for (int i = 0; i < row; i++){
 			//each column
 			for (int j = 0; j < column; j++){
-				printf("%f \t", MAT[k][i][j]);
+				printf("%f \t", MAT[1][i][j]);
 			}
 			printf("\n");
 		}
@@ -130,7 +130,7 @@ void Sequential_code(){
 	}
 
   //Display matrix ------------------------------------------------------
-  // displayMatrix(A_seq);
+  displayMatrix(A_seq);
 
   printf("Sequential code execution finished!\n");
 }
@@ -270,7 +270,7 @@ void OpenCL_code(){
 	// free(A);
 
   //Display matrix ------------------------------------------------------
-  // displayMatrix(A);
+  displayMatrix(A);
 
   printf("OpenCL code execution finished!\n");
 

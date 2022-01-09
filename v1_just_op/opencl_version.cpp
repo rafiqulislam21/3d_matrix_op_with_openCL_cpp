@@ -11,7 +11,9 @@ const unsigned int depth = 3;     //Different dimensions on each axis makes the 
 const unsigned int row = 8192;       //8192
 const unsigned int column = 8192;    //8192
 
+
 float A_seq[depth][row][column];  // sequential output matrix A
+cl_float A_input[depth][row][column];   // OpenCL Host output matrix A
 cl_float A[depth][row][column];   // OpenCL Host output matrix A
 
 //==========================================================================================================================
@@ -100,14 +102,17 @@ void Sequential_code(){
 				//for matrix k=0
 				if (k == 0){
 					A_seq[k][i][j] = (float)i / ((float)j + 1.00);
+					A_input[k][i][j] = (float)i / ((float)j + 1.00);
 				}
 				//for matrix k=1
 				else if (k == 1){
 					A_seq[k][i][j] = 1.00;
+					A_input[k][i][j] = 1.00;
 				}
 				//for matrix k=2
 				else{
 					A_seq[k][i][j] = (float)j / ((float)i + 1.00);
+					A_input[k][i][j] = (float)j / ((float)i + 1.00);
 				}
 			}
 		}
@@ -159,6 +164,7 @@ void OpenCL_code(){
 
   // Device output buffer
   cl_mem memBufferA;
+  cl_mem memBufferA_input;
   
   char buffer[10240];
 
@@ -219,7 +225,12 @@ void OpenCL_code(){
   // Create the compute kernel in the program we wish to run
   kernel = clCreateKernel(program, "ThreeDimArray", &error_no);
   errorCheck(error_no, "clCreateKernel");
-    
+
+  //create the input array in device memory
+  memBufferA_input = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, 
+				sizeof(cl_float) * depth * row * column,
+				static_cast<void *>(A_input), &error_no);
+  errorCheck(error_no, "clCreateBuffer(A_input1)");  
   // Create the input and output arrays in device memory for our calculation
   memBufferA = clCreateBuffer(context, CL_MEM_WRITE_ONLY,
 				 sizeof(cl_float) * depth * row * column,
@@ -232,7 +243,8 @@ void OpenCL_code(){
   
 
   // Set the arguments to our compute kernel
-  error_no  = clSetKernelArg(kernel, 0, sizeof(cl_mem), &memBufferA);
+  error_no  = clSetKernelArg(kernel, 0, sizeof(cl_mem), &memBufferA_input);
+  error_no  |= clSetKernelArg(kernel, 1, sizeof(cl_mem), &memBufferA);
   errorCheck(error_no, "clSetKernelArg");
   
   const size_t globalWorkSize[3] = {depth, row, column};
@@ -254,6 +266,7 @@ void OpenCL_code(){
   // Wait for the command queue to get serviced before reading back results
 	clFinish(command_queue);
 
+
   // Read the results from the device  
   error_no = clEnqueueReadBuffer( command_queue, memBufferA, CL_TRUE, 0,
 				sizeof(cl_float) * depth * row * column,
@@ -270,6 +283,7 @@ void OpenCL_code(){
 	// free(A);
 
   //Display matrix ------------------------------------------------------
+  // displayMatrix(A_input);
   // displayMatrix(A);
 
   printf("OpenCL code execution finished!\n");

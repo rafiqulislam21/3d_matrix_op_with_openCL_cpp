@@ -9,9 +9,9 @@
         ""
       ],
       "stopAtEntry": false,
-      "cwd": "h:/University Of Vienna/Sem_1/PAPM/Assignments/Assignment3",
+      "cwd": "h:/University Of Vienna/Sem_1/PAPM/Assignments/Assignment3/v1_just_op",
       "environment": [],
-      "program": "h:/University Of Vienna/Sem_1/PAPM/Assignments/Assignment3/build/Debug/outDebug",
+      "program": "h:/University Of Vienna/Sem_1/PAPM/Assignments/Assignment3/v1_just_op/build/Debug/outDebug",
       "internalConsoleOptions": "openOnSessionStart",
       "MIMode": "gdb",
       "miDebuggerPath": "C:/MinGW/bin/gdb.exe",

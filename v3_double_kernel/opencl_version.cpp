@@ -8,11 +8,12 @@
 #include <CL/cl.h>
 
 const unsigned int depth = 3;     //Different dimensions on each axis makes the indices esier to identify.
-const unsigned int row = 8192;       //8192
-const unsigned int column = 8192;    //8192
+const unsigned int row = 8;       //8192
+const unsigned int column = 8;    //8192
 
 float A_seq[depth][row][column];  // sequential output matrix A
 cl_float A[depth][row][column];   // OpenCL Host output matrix A
+cl_float A_final[depth][row][column];   // OpenCL Host output matrix A
 
 //==========================================================================================================================
 //----------------------------------Helper functions------------------------------------------------------------------------
@@ -239,18 +240,19 @@ void OpenCL_code(){
   const size_t localWorkSize[3] = {1, 1, 1};
   
   // Execute the kernel over the entire range of the data set
-  error_no = clEnqueueNDRangeKernel(
-				  command_queue,
-				  kernel,
-				  3,
-				  NULL,
-				  globalWorkSize,
-				  localWorkSize,
-				  0,
-				  NULL,
-				  NULL);
-  errorCheck(error_no, "clEnqueueNDRangeKernel");
-
+  for (int t = 0; t < 24; t++) {
+    error_no = clEnqueueNDRangeKernel(
+            command_queue,
+            kernel,
+            3,
+            NULL,
+            globalWorkSize,
+            localWorkSize,
+            0,
+            NULL,
+            NULL);
+    errorCheck(error_no, "clEnqueueNDRangeKernel");
+  }
   // Wait for the command queue to get serviced before reading back results
 	clFinish(command_queue);
 
@@ -259,6 +261,62 @@ void OpenCL_code(){
 				sizeof(cl_float) * depth * row * column,
 				A, 0, NULL, NULL);
   errorCheck(error_no, "clEnqueueReadBuffer - 1");
+
+
+
+
+  // //------------------test-----------------------------------
+  // cl_mem memBufferA_final;
+  // cl_command_queue command_queue2;
+  // cl_kernel kernel2;
+  // // Create the compute kernel in the program we wish to run
+  // kernel2 = clCreateKernel(program, "iterations", &error_no);
+  // errorCheck(error_no, "clCreateKernel--it");
+    
+  // // Create the input and output arrays in device memory for our calculation
+  // memBufferA = clCreateBuffer(context, CL_MEM_READ_ONLY,
+	// 			 sizeof(cl_float) * depth * row * column,
+	// 			 NULL, &error_no);
+  // errorCheck(error_no, "clCreateBuffer(A)--it");
+  
+  // memBufferA_final = clCreateBuffer(context, CL_MEM_WRITE_ONLY,
+	// 			 sizeof(cl_float) * depth * row * column,
+	// 			 NULL, &error_no);
+  // errorCheck(error_no, "clCreateBuffer(A_final)--it");
+  
+  // // Create a command queue
+  // command_queue2 = clCreateCommandQueue(context, device_ids[0], 0, &error_no);
+  // errorCheck(error_no, "clCreateCommandCommand_Queue--it");
+  
+
+  // // Set the arguments to our compute kernel
+  // error_no  = clSetKernelArg(kernel, 0, sizeof(cl_mem), &memBufferA);
+  // errorCheck(error_no, "clSetKernelArg");
+  // error_no  |= clSetKernelArg(kernel, 0, sizeof(cl_mem), &memBufferA_final);
+  // errorCheck(error_no, "clSetKernelArg");
+  
+  // // Execute the kernel over the entire range of the data set
+  // error_no = clEnqueueNDRangeKernel(
+	// 			  command_queue2,
+	// 			  kernel2,
+	// 			  3,
+	// 			  NULL,
+	// 			  globalWorkSize,
+	// 			  localWorkSize,
+	// 			  0,
+	// 			  NULL,
+	// 			  NULL);
+  // errorCheck(error_no, "clEnqueueNDRangeKernel--it");
+
+  // // Wait for the command queue to get serviced before reading back results
+	// clFinish(command_queue2);
+
+  // // Read the results from the device  
+  // error_no = clEnqueueReadBuffer( command_queue2, memBufferA_final, CL_TRUE, 0,
+	// 			sizeof(cl_float) * depth * row * column,
+	// 			A_final, 0, NULL, NULL);
+  // errorCheck(error_no, "clEnqueueReadBuffer - 1 --it");
+  //test----------------------------------------------------
 
   // release OpenCL resources
 	clReleaseMemObject(memBufferA);
@@ -321,3 +379,4 @@ int main(int argc, char** argv){
 
   return(0);
 }
+
