@@ -8,8 +8,8 @@
 #include <CL/cl.h>
 
 const unsigned int depth = 3;     //Different dimensions on each axis makes the indices esier to identify.
-const unsigned int row = 8192;       //8192
-const unsigned int column = 8192;    //8192
+const unsigned int row = 8;       //8192
+const unsigned int column = 8;    //8192
 
 float A_seq[depth][row][column];  // sequential output matrix A
 cl_float A[depth][row][column];   // OpenCL Host output matrix A
@@ -128,9 +128,6 @@ void Sequential_code(){
 		}
 		// printf("\n");
 	}
-
-  //Display matrix ------------------------------------------------------
-  // displayMatrix(A_seq);
 
   printf("Sequential code execution finished!\n");
 }
@@ -269,23 +266,7 @@ void OpenCL_code(){
 	//release host memory
 	// free(A);
 
-  //Display matrix ------------------------------------------------------
-  // displayMatrix(A);
-
   printf("OpenCL code execution finished!\n");
-
-  // std::ofstream fout("output.txt");
-  // for (int x = 0; x < depth; x++){
-  //   for (int y = 0; y < row; y++){
-  //     for (int z = 0; z < column; z++){
-	// 	fout << A[x][y][z] << " ";
-  //     }	
-  //     fout << std::endl;
-  //   }
-  //   fout << std::endl;
-  // }
-  // fout <<  "***********************************\n" << std::endl;
-  // fout.close();
 }
 
 //==========================================================================================================================
@@ -302,6 +283,8 @@ int main(int argc, char** argv){
   clock_t seq_t2 = clock();           //taking end time of execution
 	// printf("Sequential Code: \n");
 	double seq_time = showTimeDifference(seq_t1, seq_t2); //calculate time difference for sequential executation
+  //Display seq matrix 
+  displayMatrix(A_seq);
 
   
   //OpenCL code----------------------------------------------------------
@@ -310,7 +293,8 @@ int main(int argc, char** argv){
   clock_t opn_t2 = clock();           //taking end time of OpenCL execution
 	// printf("OpenCL Code: \n");
 	double openCl_time = showTimeDifference(opn_t1, opn_t2); //calculate time difference for OpenCl parallel executation
-
+  //Display matrix 
+  displayMatrix(A);
 
   //matrix validation----------------------------------------------------
   checkValidity(A_seq, A);

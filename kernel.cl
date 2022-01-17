@@ -11,60 +11,53 @@ __kernel void ThreeDimArray(__global float *const A) {
   //   access matrix A in 1D form
   //------------optimization test faster---------------------------------------
  
-  // if (k == 0) {
-  //   A[idx] = (float)i / ((float)j + 1.00);
-  // } else if (k == 1) {
-  //   A[idx] = 1.00;
-  // } else {
-  //   A[idx] = (float)j / ((float)i + 1.00);
-  // }
+  if (k == 0) {
+    A[idx] = (float)i / ((float)j + 1.00);
+  } else if (k == 1) {
+    A[idx] = 1.00;
+  } else {
+    A[idx] = (float)j / ((float)i + 1.00);
+  }
 
-  // barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
-
-  // // iteration part
-  // if (i >= 1 && i <= row - 1) {
-  //   const int idk0i1 =
-  //       0 * row * column + (i + 1) * column + j; // indexes for k=0 and i+1
-  //   const int idk2i1 =
-  //       2 * row * column + (i - 1) * column + j; // indexes for k=2 and i-1
-  //   if (k == 1) {
-  //     for (int t = 0; t < 24; t++) {
-  //       // A_seq[1][i][j] = A_seq[1][i][j] + (1 / (sqrt(A_seq[0][i + 1][j] +
-  //       // A_seq[2][i - 1][j])));
-  //       A[idx] = A[idx] + (float)(1 / (native_sqrt(A[idk0i1] + A[idk2i1])));
-  //     }
-  //   }
-  // }
-  //------------optimization test faster---------------------------------------
-
-  //------------accurate but slower---------------------------------------
-  const int idk0 = 0 * row * column + i * column + j; // indexes for k=0
-  const int idk1 = 1 * row * column + i * column + j; // indexes for k=1
-  const int idk2 = 2 * row * column + i * column + j; // indexes for k=2
-
-  A[idk0] = (float)i / ((float)j + 1.00);
-  A[idk1] = 1.00;
-  A[idk2] = (float)j / ((float)i + 1.00);
-
-  barrier(CLK_GLOBAL_MEM_FENCE);
+  barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
 
   // iteration part
-  if(i >= 1 && i <= row-1){
-    const int idk0i1 = 0 * row * column + (i+1) * column + j; // indexes for k=0 and i+1 
-    const int idk2i1 = 2 * row * column + (i-1) * column + j; //indexes for k=2 and i-1 
-    for (int t = 0; t < 24; t++) {
-      // A_seq[1][i][j] = A_seq[1][i][j] + (1 / (sqrt(A_seq[0][i + 1][j] +A_seq[2][i - 1][j]))); 
-      A[idk1] = A[idk1] + (float)(1 / (native_sqrt(A[idk0i1] + A[idk2i1])));
+  if (i >= 1 && i <= row - 1) {
+    const int idk0i1 = 0 * row * column + (i + 1) * column + j; // indexes for k=0 and i+1
+    const int idk2i1 = 2 * row * column + (i - 1) * column + j; // indexes for k=2 and i-1
+    if (k == 1) {
+      for (int t = 0; t < 24; t++) {
+        // A_seq[1][i][j] = A_seq[1][i][j] + (1 / (sqrt(A_seq[0][i + 1][j] + A_seq[2][i - 1][j])));
+        A[idx] = A[idx] + (float)(1 / (native_sqrt(A[idk0i1] + A[idk2i1])));
+      }
     }
   }
-  //------------accurate but slower---------------------------------------
+  //------------optimization test faster---------------------------------------
+
+
+
+  // //------------accurate but slower---------------------------------------
+  // const int idk0 = 0 * row * column + i * column + j; // indexes for k=0
+  // const int idk1 = 1 * row * column + i * column + j; // indexes for k=1
+  // const int idk2 = 2 * row * column + i * column + j; // indexes for k=2
+
+  // A[idk0] = (float)i / ((float)j + 1.00);
+  // A[idk1] = 1.00;
+  // A[idk2] = (float)j / ((float)i + 1.00);
+
+  // barrier(CLK_GLOBAL_MEM_FENCE);
+
+  // // iteration part
+  // if(i >= 1 && i <= row-1){
+  //   const int idk0i1 = 0 * row * column + (i+1) * column + j; // indexes for k=0 and i+1 
+  //   const int idk2i1 = 2 * row * column + (i-1) * column + j; //indexes for k=2 and i-1 
+  //   for (int t = 0; t < 24; t++) {
+  //     // A_seq[1][i][j] = A_seq[1][i][j] + (1 / (sqrt(A_seq[0][i + 1][j] +A_seq[2][i - 1][j]))); 
+  //     A[idk1] = A[idk1] + (float)(1 / (native_sqrt(A[idk0i1] + A[idk2i1])));
+  //   }
+  // }
+  // //------------accurate but slower---------------------------------------
 };
-
-
-
-
-
-
 
 
 
