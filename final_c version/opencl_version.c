@@ -12,15 +12,22 @@
 
 #define MAX_SOURCE_SIZE (0x100000)
 
+
 //for using sequential part
 const int depth = 3;
-const int row = 8192; //8192
-const int column = 8192;
+const int row = 8; //8192
+const int column = 8;
 
 float A_seq[depth][row][column];
 
+
 //for openCL part
-int SIZE = 8192; //8192
+int SIZE = 8; //8192
+// Allocate memories for input arrays and output array.
+float *A = (float *)malloc(sizeof(float) * SIZE * SIZE); //for k=0 read only
+float *B = (float *)malloc(sizeof(float) * SIZE * SIZE); //for k=1 read and write
+float *C = (float *)malloc(sizeof(float) * SIZE * SIZE); //for k=2 ready only
+
 
 //======================================================================================================================
 //----------------------------------Helper functions--------------------------------------------------------------------
@@ -28,7 +35,6 @@ int SIZE = 8192; //8192
 double showTimeDifference(clock_t t1, clock_t t2)
 {
 	double timeDifference = double(t2 - t1) / CLOCKS_PER_SEC;
-	;
 	printf("========================= Time taken %.4f s ==========================\n\n", timeDifference);
 
 	return timeDifference;
@@ -39,14 +45,14 @@ void displayMatrix(float (*MAT)[row][column])
 	//Display matrix ------------------------------------------------------
 	for (int k = 0; k < depth; k++)
 	{
-		printf("Baseline matrix k = %d (i=0..10, j =0..10):\n", k);
+		printf("Baseline matrix k = %d (i=0...., j =0....):\n", k);
 		//each row
 		for (int i = 0; i < row; i++)
 		{
 			//each column
 			for (int j = 0; j < column; j++)
 			{
-				printf("%f \t", MAT[k][i][j]);
+				printf("%.2f \t", MAT[k][i][j]);
 			}
 			printf("\n");
 		}
@@ -54,7 +60,87 @@ void displayMatrix(float (*MAT)[row][column])
 	}
 }
 
-void checkValidity(float (*MAT_A)[row][column], float (*MAT_B)[row][column])
+void displayMatrixOpenCL(float *vec1, float *vec2, float *vec3)
+{
+	for (int k = 0; k < depth; k++)
+	{	
+		printf("Baseline matrix k = %d (i=0...., j =0....):\n", k);
+		if (k == 0)
+		{
+			for (int i = 0; i < SIZE; ++i)
+			{
+				for (int j = 0; j < SIZE; ++j)
+				{
+					printf("%.2f \t", vec1[i * SIZE + j]);
+				}
+				printf("\n");
+			}
+		}
+		else if (k == 1)
+		{
+			for (int i = 0; i < SIZE; ++i)
+			{
+				for (int j = 0; j < SIZE; ++j)
+				{
+					printf("%.2f \t", vec2[i * SIZE + j]);
+				}
+				printf("\n");
+			}
+		}
+		else if (k == 2)
+		{
+			for (int i = 0; i < SIZE; ++i)
+			{
+				for (int j = 0; j < SIZE; ++j)
+				{
+					printf("%.2f \t", vec3[i * SIZE + j]);
+				}
+				printf("\n");
+			}
+		}
+		printf("\n");
+	}
+}
+
+void convertMatrix2d(float *vec1, float *vec2, float *vec3){
+	float A_opncl[depth][row][column];
+
+	for (int k = 0; k < depth; k++)
+	{	
+		if (k == 0)
+		{
+			for (int i = 0; i < SIZE; ++i)
+			{
+				for (int j = 0; j < SIZE; ++j)
+				{
+					A_opncl[k][i][j] = vec1[i * SIZE + j];
+				}
+			}
+		}
+		else if (k == 1)
+		{
+			for (int i = 0; i < SIZE; ++i)
+			{
+				for (int j = 0; j < SIZE; ++j)
+				{
+					A_opncl[k][i][j] =  vec2[i * SIZE + j];
+				}
+			}
+		}
+		else if (k == 2)
+		{
+			for (int i = 0; i < SIZE; ++i)
+			{
+				for (int j = 0; j < SIZE; ++j)
+				{
+					A_opncl[k][i][j] =  vec3[i * SIZE + j];
+				}
+			}
+		}
+	}
+}
+
+void checkValidity(float (*MAT_A)[row][column], float *A, float *B, float *C)
 {
 	//check matrix validity------------------------------------------------------
 	bool isSame = true;
@@ -65,12 +151,35 @@ void checkValidity(float (*MAT_A)[row][column], float (*MAT_B)[row][column])
 		{
 			//each column
 			for (int j = 0; j < column; j++)
-			{
-				if (round(MAT_A[k][i][j]) != round(MAT_B[k][i][j]))
+			{	
+				if (k == 0)
 				{
-					printf("mat seq = %f\n", MAT_A[k][i][j]);
-					printf("mat opem = %f\n", MAT_B[k][i][j]);
-					isSame = false;
+					if (MAT_A[k][i][j] != A[i * SIZE + j])
+					{
+						printf("mat seq k0 = %f\n", MAT_A[k][i][j]);
+						isSame = false;
+						break;
+					}
+				}
+				//for matrix k=1
+				else if (k == 1)
+				{
+					if (MAT_A[k][i][j] != B[i * SIZE + j])
+					{
+						printf("mat seq k1 = %f\n", MAT_A[k][i][j]);
+						isSame = false;
+						break;
+					}
+				}
+				//for matrix k=2
+				else
+				{
+					if (MAT_A[k][i][j] != C[i * SIZE + j])
+					{
+						printf("mat seq k2 = %f\n", MAT_A[k][i][j]);
+						isSame = false;
+						break;
+					}
 				}
 			}
 		}
@@ -86,15 +195,8 @@ void checkValidity(float (*MAT_A)[row][column], float (*MAT_B)[row][column])
 	}
 }
 
-//======================================================================================================================
-//----------------------------------Helper functions--------------------------------------------------------------------
-//======================================================================================================================
-
-//======================================================================================================================
-//----------------------------------Sequential code---------------------------------------------------------------------
-//======================================================================================================================
-void sequential_code()
-{
+//matrix init for both sequential and openCL version
+void initializationMatrix(){
 	//loop to fill in every row
 	for (int k = 0; k < depth; k++)
 	{
@@ -107,22 +209,35 @@ void sequential_code()
 				//for matrix k=0
 				if (k == 0)
 				{
-					A_seq[k][i][j] = (float)i / ((float)j + 1.00);
+					A_seq[k][i][j] = (float)i / ((float)j + 1.00);  //sequential
+					A[i * SIZE + j] = (float)i / ((float)j + 1.00); //A_seq[0][i][j] OpenCL
 				}
 				//for matrix k=1
 				else if (k == 1)
 				{
-					A_seq[k][i][j] = 1.00;
+					A_seq[k][i][j] = 1.00; //sequential
+					B[i * SIZE + j] = 1.00; //A_seq[1][i][j] OpenCL
 				}
 				//for matrix k=2
 				else
 				{
-					A_seq[k][i][j] = (float)j / ((float)i + 1.00);
+					A_seq[k][i][j] = (float)j / ((float)i + 1.00); //sequential
+					C[i * SIZE + j] = (float)j / ((float)i + 1.00); //A_seq[2][i][j] OpenCL
 				}
 			}
 		}
 	}
+}
 
+//======================================================================================================================
+//----------------------------------Helper functions--------------------------------------------------------------------
+//======================================================================================================================
+
+//======================================================================================================================
+//----------------------------------Sequential code---------------------------------------------------------------------
+//======================================================================================================================
+void sequential_code()
+{
 	//Iteration count
 	for (int t = 0; t < 24; t++)
 	{
@@ -146,8 +261,13 @@ void sequential_code()
 //----------------------------------Sequential code---------------------------------------------------------------------
 //======================================================================================================================
 
+
+
 int main(int argc, char **argv)
-{
+{	
+	//initalization matrix--------------------------------------------------------------------------------------
+	initializationMatrix();
+	//initalization matrix-------------------------------------------------------------------------------------------
 
 	//sequential code-------------------------------------------------------------------------------------------
 	printf("Sequential code start executing......\n");
@@ -156,46 +276,14 @@ int main(int argc, char **argv)
 	clock_t seq_t2 = clock(); //taking end time of execution
 	// printf("Sequential Code: \n");
 	double seq_time = showTimeDifference(seq_t1, seq_t2); //calculate time difference for sequential executation
-	//Display seq matrix
-	// displayMatrix(A_seq);
 	printf("Sequential code execution finished!\n");
+	//Display seq matrix
+	displayMatrix(A_seq);
 	//sequential code-------------------------------------------------------------------------------------------
-
-
 
 	//OpenCL code-----------------------------------------------------------------------------------------------
 	printf("Opencl code start executing......\n");
-	
-	// Allocate memories for input arrays and output array.
-	float *A = (float *)malloc(sizeof(float) * SIZE * SIZE); //for k=0 read only
-	float *B = (float *)malloc(sizeof(float) * SIZE * SIZE); //for k=1 read and write
-	float *C = (float *)malloc(sizeof(float) * SIZE * SIZE); //for k=2 ready only
-
-	// Initialize values for array members.
-	for (int k = 0; k < depth; ++k)
-	{
-		for (int i = 0; i < SIZE; ++i)
-		{
-			for (int j = 0; j < SIZE; ++j)
-			{
-				//for matrix k=0
-				if (k == 0)
-				{
-					A[i * SIZE + j] = (float)i / ((float)j + 1.00); //A_seq[0][i][j]
-				}
-				//for matrix k=1
-				else if (k == 1)
-				{
-					B[i * SIZE + j] = 1.00;	//A_seq[1][i][j]
-				}
-				//for matrix k=2
-				else
-				{
-					C[i * SIZE + j] = (float)j / ((float)i + 1.00);	//A_seq[2][i][j]
-				}
-			}
-		}
-	}
+	clock_t opn_t1 = clock(); //taking start time of OpenCL execution
 
 	// Load kernel from file matKernel.cl
 	FILE *kernelFile;
@@ -232,9 +320,6 @@ int main(int argc, char **argv)
 	cl_mem bMemObj = clCreateBuffer(context, CL_MEM_READ_WRITE, SIZE * SIZE * sizeof(float), NULL, &ret);
 	cl_mem cMemObj = clCreateBuffer(context, CL_MEM_READ_ONLY, SIZE * SIZE * sizeof(float), NULL, &ret);
 
-
-
-	clock_t opn_t1 = clock();           //taking start time of OpenCL execution
 	// Copy lists to memory buffers
 	ret = clEnqueueWriteBuffer(commandQueue, aMemObj, CL_TRUE, 0, SIZE * SIZE * sizeof(float), A, 0, NULL, NULL);
 	ret = clEnqueueWriteBuffer(commandQueue, bMemObj, CL_TRUE, 0, SIZE * SIZE * sizeof(float), B, 0, NULL, NULL);
@@ -265,37 +350,24 @@ int main(int argc, char **argv)
 
 	// Read from device back to host.
 	ret = clEnqueueReadBuffer(commandQueue, bMemObj, CL_TRUE, 0, SIZE * SIZE * sizeof(float), B, 0, NULL, NULL);
-	
-	clock_t opn_t2 = clock();           //taking end time of OpenCL execution
-	printf("OpenCL code execution finished!\n");
-	
+
+	clock_t opn_t2 = clock(); //taking end time of OpenCL execution
 	// printf("OpenCL Code: \n");
 	double openCl_time = showTimeDifference(opn_t1, opn_t2); //calculate time difference for OpenCl parallel executation
-  	
-	//Display matrix 
-  	// displayMatrix(A);
+	printf("OpenCL code execution finished!\n");
 
-  	//matrix validation----------------------------------------------------
-  	// checkValidity(A_seq, A);
+	//Display matrix
+	displayMatrixOpenCL(A, B, C);
 
-  	//performance calculation----------------------------------------------
-  	double speedUp = seq_time/openCl_time;
-  	printf("Speed up: %.2f \n", speedUp);
+	//matrix validation----------------------------------------------------
+	checkValidity(A_seq, A, B, C);
 
-
-	// Write result
-	// printf("\n");
-	// for (int i = 0; i < SIZE; ++i)
-	// {
-	// 	for (int j = 0; j < SIZE; ++j)
-	// 	{
-	// 		printf("%.2f \t", B[i * SIZE + j]);
-	// 	}
-	// 	printf("\n");
-	// }
+	//performance calculation----------------------------------------------
+	double speedUp = seq_time / openCl_time;
+	printf("Speed up: %.2f \n", speedUp);
 
 
-	// Clean up, release memory.
+	// Clean up, release memory
 	ret = clFlush(commandQueue);
 	ret = clFinish(commandQueue);
 	ret = clReleaseCommandQueue(commandQueue);
