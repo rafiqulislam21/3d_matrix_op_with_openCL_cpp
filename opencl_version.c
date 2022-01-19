@@ -1,145 +1,419 @@
+
+#ifdef __APPLE__
+#include <OpenCL/opencl.h>
+#else
+#include <CL/cl.h>
+#endif
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
-#include <CL/opencl.h>
+#include <time.h>
 
 #define MAX_SOURCE_SIZE (0x100000)
 
-int main(int argc, char *argv[])
+//for openCL part
+const int SIZE = 8192; //2048, 4096, 8192
+// Allocate memories for input arrays and output array.
+float *A = (float *)malloc(sizeof(float) * SIZE * SIZE); //for k=0 read only
+float *B = (float *)malloc(sizeof(float) * SIZE * SIZE); //for k=1 read and write
+float *C = (float *)malloc(sizeof(float) * SIZE * SIZE); //for k=2 ready only
+
+//for using sequential part
+const int depth = 3;
+const int row = SIZE; //8192
+const int column = SIZE;
+
+float A_seq[depth][row][column];
+
+//======================================================================================================================
+//----------------------------------Helper functions--------------------------------------------------------------------
+//======================================================================================================================
+double showTimeDifference(clock_t t1, clock_t t2)
 {
-	// Length of vectors
-	unsigned int n = 100000;
+	double timeDifference = double(t2 - t1) / CLOCKS_PER_SEC;
+	printf("========================= Time taken %.4f s ==========================\n\n", timeDifference);
 
-	// Host input vectors
-	double *A;
-	double *B;
-	// Host output vector
-	double *C;
+	return timeDifference;
+}
 
-	// Device input buffers
-	cl_mem mem_a;
-	cl_mem mem_b;
-	// Device output buffer
-	cl_mem mem_c;
-
-	cl_platform_id cpPlatform; // OpenCL platform
-	cl_device_id device_id;	   // device ID
-	cl_context context;		   // context
-	cl_command_queue queue;	   // command queue
-	cl_program program;		   // program
-	cl_kernel kernel;		   // kernel
-
-	// Size, in bytes, of each vector
-	size_t bytes = n * sizeof(double);
-
-	// Allocate memory for each vector on host
-	A = (double *)malloc(bytes);
-	B = (double *)malloc(bytes);
-	C = (double *)malloc(bytes);
-
-	// Initialize vectors on host
-	int i;
-	for (i = 0; i < n; i++)
+void displayMatrix(float (*MAT)[row][column])
+{
+	//Display matrix ------------------------------------------------------
+	for (int k = 0; k < depth; k++)
 	{
-		A[i] = i;
-		B[i] = i;
+		printf("Baseline matrix k = %d (i=0...., j =0....):\n", k);
+		//each row
+		for (int i = 0; i < row; i++)
+		{
+			//each column
+			for (int j = 0; j < column; j++)
+			{
+				printf("%.2f \t", MAT[k][i][j]);
+			}
+			printf("\n");
+		}
+		printf("\n");
+	}
+}
+
+void displayMatrixOpenCL(float *vec1, float *vec2, float *vec3)
+{
+	for (int k = 0; k < depth; k++)
+	{
+		printf("Baseline matrix k = %d (i=0...., j =0....):\n", k);
+		if (k == 0)
+		{
+			for (int i = 0; i < SIZE; ++i)
+			{
+				for (int j = 0; j < SIZE; ++j)
+				{
+					printf("%.2f \t", vec1[i * SIZE + j]);
+				}
+				printf("\n");
+			}
+		}
+		else if (k == 1)
+		{
+			for (int i = 0; i < SIZE; ++i)
+			{
+				for (int j = 0; j < SIZE; ++j)
+				{
+					printf("%.2f \t", vec2[i * SIZE + j]);
+				}
+				printf("\n");
+			}
+		}
+		else if (k == 2)
+		{
+			for (int i = 0; i < SIZE; ++i)
+			{
+				for (int j = 0; j < SIZE; ++j)
+				{
+					printf("%.2f \t", vec3[i * SIZE + j]);
+				}
+				printf("\n");
+			}
+		}
+		printf("\n");
+	}
+}
+
+//this function will save the open cl matrix into txt file
+void saveMatrixOpenCL(float *vec1, float *vec2, float *vec3)
+{
+	/* Variable to store user content */
+	char data[MAX_SOURCE_SIZE];
+
+	/* File pointer to hold reference to our file */
+	FILE *fPtr;
+
+	/* 
+     * Open file in w (write) mode. 
+     * "data/file1.txt" is complete path to create file
+     */
+	fPtr = fopen("matrix_output.txt", "w");
+
+	/* fopen() return NULL if last operation was unsuccessful */
+	if (fPtr == NULL)
+	{
+		/* File not created hence exit */
+		printf("Unable to create file.\n");
+		exit(EXIT_FAILURE);
 	}
 
-	//kernel----------------------------------------------
-	// Load the kernel source code into the array kernelSource
-	FILE *fp;
-	char *kernelSource;
-	size_t source_size;
+	// /* Input contents from user to store in file */
+	// printf("Enter contents to store in file : \n");
+	// fgets(data, DATA_SIZE, stdin);
 
-	fp = fopen("kernel.cl", "r");
-	if (!fp)
+	for (int k = 0; k < depth; k++)
 	{
-		fprintf(stderr, "Failed to load kernel.\n");
-		exit(1);
+		// printf("Baseline matrix k = %d (i=0...., j =0....):\n", k);
+		/* Write data to file */
+		fprintf(fPtr, "Baseline matrix k = %d (i=0...., j =0....):\n", k);
+		if (k == 0)
+		{
+			for (int i = 0; i < SIZE; ++i)
+			{
+				for (int j = 0; j < SIZE; ++j)
+				{
+					fprintf(fPtr, "%.2f \t", vec1[i * SIZE + j]);
+				}
+				fprintf(fPtr, "\n");
+			}
+		}
+		else if (k == 1)
+		{
+			for (int i = 0; i < SIZE; ++i)
+			{
+				for (int j = 0; j < SIZE; ++j)
+				{
+					fprintf(fPtr, "%.2f \t", vec2[i * SIZE + j]);
+				}
+				fprintf(fPtr, "\n");
+			}
+		}
+		else if (k == 2)
+		{
+			for (int i = 0; i < SIZE; ++i)
+			{
+				for (int j = 0; j < SIZE; ++j)
+				{
+					fprintf(fPtr, "%.2f \t", vec3[i * SIZE + j]);
+				}
+				fprintf(fPtr, "\n");
+			}
+		}
+		// printf("\n");
+	}
+
+	/* Close file to save file data */
+	fclose(fPtr);
+
+	/* Success message */
+	printf("File created and saved successfully. :) \n");
+}
+
+void checkValidity(float (*MAT_A)[row][column], float *A, float *B, float *C)
+{
+	//check matrix validity------------------------------------------------------
+	bool isSame = true;
+	for (int k = 0; k < depth; k++)
+	{
+		//each row
+		for (int i = 0; i < row; i++)
+		{
+			//each column
+			for (int j = 0; j < column; j++)
+			{
+				if (k == 0)
+				{
+					if ((MAT_A[k][i][j] - A[i * SIZE + j] > 0.001))
+					{
+						printf("mat seq k0 = %f\n", MAT_A[k][i][j]);
+						printf("mat opencl k0 = %f\n", A[i * SIZE + j]);
+						isSame = false;
+						break;
+					}
+				}
+				//for matrix k=1
+				else if (k == 1)
+				{
+					if ((MAT_A[k][i][j] - B[i * SIZE + j] > 0.001))
+					{
+						printf("mat seq k1 = %f\n", MAT_A[k][i][j]);
+						printf("mat opencl k1 = %f\n", B[i * SIZE + j]);
+						isSame = false;
+						break;
+					}
+				}
+				//for matrix k=2
+				else if (k == 2)
+				{
+					if ((MAT_A[k][i][j] - C[i * SIZE + j] > 0.001))
+					{
+						printf("mat seq k2 = %f\n", MAT_A[k][i][j]);
+						printf("mat opencl k2 = %f\n", C[i * SIZE + j]);
+						isSame = false;
+						break;
+					}
+				}
+			}
+		}
+	}
+
+	if (isSame == true)
+	{
+		printf("Matrix validition Successful!\n\n");
+	}
+	else
+	{
+		printf("Matrix validition Failed!\n\n");
+	}
+}
+
+//matrix init for both sequential and openCL version
+void initializationMatrix()
+{
+	//loop to fill in every row
+	for (int k = 0; k < depth; k++)
+	{
+		//loop to fill in every column
+		for (int i = 0; i < row; i++)
+		{
+			//loop to fill in each 2D matrix
+			for (int j = 0; j < column; j++)
+			{
+				//for matrix k=0
+				if (k == 0)
+				{
+					A_seq[k][i][j] = (float)i / ((float)j + 1.00);	//sequential
+					A[i * SIZE + j] = (float)i / ((float)j + 1.00); //A_seq[0][i][j] convert to A 1d array for OpenCL
+				}
+				//for matrix k=1
+				else if (k == 1)
+				{
+					A_seq[k][i][j] = 1.00;	//sequential
+					B[i * SIZE + j] = 1.00; //A_seq[1][i][j] convert to B 1d array for OpenCL
+				}
+				//for matrix k=2
+				else if (k == 2)
+				{
+					A_seq[k][i][j] = (float)j / ((float)i + 1.00);	//sequential
+					C[i * SIZE + j] = (float)j / ((float)i + 1.00); //A_seq[2][i][j] convert to C 1d array for OpenCL
+				}
+			}
+		}
+	}
+}
+
+//======================================================================================================================
+//----------------------------------Helper functions--------------------------------------------------------------------
+//======================================================================================================================
+
+//======================================================================================================================
+//----------------------------------Sequential code---------------------------------------------------------------------
+//======================================================================================================================
+void sequential_code()
+{
+	//Iteration count
+	for (int t = 0; t < 24; t++)
+	{
+		// printf("Iteration = %d :\n", t);
+		//each row - beware first row and last row not to be updated therefore from 1...8190
+		for (int i = 1; i < row - 1; i++)
+		{
+			//each column
+			for (int j = 0; j < column; j++)
+			{
+				//only matrix k=1 is updated
+				A_seq[1][i][j] = A_seq[1][i][j] + (1 / (sqrt(A_seq[0][i + 1][j] + A_seq[2][i - 1][j])));
+				// printf("%.2f \t", A[1][i][j]);
+			}
+			// printf("\n");
+		}
+		// printf("\n");
+	}
+}
+//======================================================================================================================
+//----------------------------------Sequential code---------------------------------------------------------------------
+//======================================================================================================================
+
+int main(int argc, char **argv)
+{
+	//initalization matrix--------------------------------------------------------------------------------------
+	initializationMatrix();
+
+	//sequential code-------------------------------------------------------------------------------------------
+	printf("Sequential code start executing......\n");
+	clock_t seq_t1 = clock(); //taking start time of execution
+	sequential_code();
+	clock_t seq_t2 = clock(); //taking end time of execution
+	// printf("Sequential Code: \n");
+	double seq_time = showTimeDifference(seq_t1, seq_t2); //calculate time difference for sequential executation
+	printf("Sequential code execution finished!\n");
+
+	//Display seqquential matrix--------------------------------------------
+	// displayMatrix(A_seq);
+
+	//OpenCL code-----------------------------------------------------------------------------------------------
+	printf("Opencl code start executing......\n");
+	clock_t opn_t1 = clock(); //taking start time of OpenCL execution
+
+	// Load kernel from file matKernel.cl
+	FILE *kernelFile;
+	char *kernelSource;
+	size_t kernelSize;
+
+	kernelFile = fopen("matKernel.cl", "r");
+
+	if (!kernelFile)
+	{
+		fprintf(stderr, "No file named matKernel.cl was found\n");
+		exit(-1);
 	}
 	kernelSource = (char *)malloc(MAX_SOURCE_SIZE);
-	source_size = fread(kernelSource, 1, MAX_SOURCE_SIZE, fp);
-	fclose(fp);
-	//kernel----------------------------------------------
+	kernelSize = fread(kernelSource, 1, MAX_SOURCE_SIZE, kernelFile);
+	fclose(kernelFile);
 
-	size_t globalSize, localSize;
-	cl_int err;
+	// Getting platform and device information
+	cl_platform_id platformId = NULL;
+	cl_device_id deviceID = NULL;
+	cl_uint retNumDevices;
+	cl_uint retNumPlatforms;
+	cl_int ret = clGetPlatformIDs(1, &platformId, &retNumPlatforms);
+	ret = clGetDeviceIDs(platformId, CL_DEVICE_TYPE_DEFAULT, 1, &deviceID, &retNumDevices);
 
-	// Number of work items in each local work group
-	localSize = 64;
+	// Creating context.
+	cl_context context = clCreateContext(NULL, 1, &deviceID, NULL, NULL, &ret);
 
-	// Number of total work items - localSize must be devisor
-	globalSize = ceil(n / (float)localSize) * localSize;
+	// Creating command queue
+	cl_command_queue commandQueue = clCreateCommandQueue(context, deviceID, 0, &ret);
 
-	// Bind to platform
-	err = clGetPlatformIDs(1, &cpPlatform, NULL);
+	// Memory buffers for each array
+	cl_mem aMemObj = clCreateBuffer(context, CL_MEM_READ_ONLY, SIZE * SIZE * sizeof(float), NULL, &ret);
+	cl_mem bMemObj = clCreateBuffer(context, CL_MEM_READ_WRITE, SIZE * SIZE * sizeof(float), NULL, &ret);
+	cl_mem cMemObj = clCreateBuffer(context, CL_MEM_READ_ONLY, SIZE * SIZE * sizeof(float), NULL, &ret);
 
-	// Get ID for the device
-	err = clGetDeviceIDs(cpPlatform, CL_DEVICE_TYPE_GPU, 1, &device_id, NULL);
+	// Copy lists to memory buffers
+	ret = clEnqueueWriteBuffer(commandQueue, aMemObj, CL_TRUE, 0, SIZE * SIZE * sizeof(float), A, 0, NULL, NULL);
+	ret = clEnqueueWriteBuffer(commandQueue, bMemObj, CL_TRUE, 0, SIZE * SIZE * sizeof(float), B, 0, NULL, NULL);
+	ret = clEnqueueWriteBuffer(commandQueue, cMemObj, CL_TRUE, 0, SIZE * SIZE * sizeof(float), C, 0, NULL, NULL);
 
-	// Create a context
-	context = clCreateContext(0, 1, &device_id, NULL, NULL, &err);
+	// Create program from kernel source
+	cl_program program = clCreateProgramWithSource(context, 1, (const char **)&kernelSource, (const size_t *)&kernelSize, &ret);
 
-	// Create a command queue
-	queue = clCreateCommandQueue(context, device_id, 0, &err);
+	// Build program
+	ret = clBuildProgram(program, 1, &deviceID, NULL, NULL, NULL);
 
-	// Create the compute program from the source buffer
-	program = clCreateProgramWithSource(context, 1,
-										(const char **)&kernelSource, NULL, &err);
+	// Create kernel
+	cl_kernel kernel = clCreateKernel(program, "matrixOperations", &ret);
 
-	// Build the program executable
-	clBuildProgram(program, 0, NULL, NULL, NULL, NULL);
+	// Set arguments for kernel
+	ret = clSetKernelArg(kernel, 0, sizeof(cl_mem), (void *)&aMemObj);
+	ret = clSetKernelArg(kernel, 1, sizeof(cl_mem), (void *)&bMemObj);
+	ret = clSetKernelArg(kernel, 2, sizeof(cl_mem), (void *)&cMemObj);
+	ret = clSetKernelArg(kernel, 3, sizeof(cl_int), &SIZE);
 
-	// Create the compute kernel in the program we wish to run
-	kernel = clCreateKernel(program, "vecAdd", &err);
-
-	// Create the input and output arrays in device memory for our calculation
-	mem_a = clCreateBuffer(context, CL_MEM_READ_ONLY, bytes, NULL, NULL);
-	mem_b = clCreateBuffer(context, CL_MEM_READ_ONLY, bytes, NULL, NULL);
-	mem_c = clCreateBuffer(context, CL_MEM_WRITE_ONLY, bytes, NULL, NULL);
-
-	// Write our data set into the input array in device memory
-	err = clEnqueueWriteBuffer(queue, mem_a, CL_TRUE, 0,
-							   bytes, A, 0, NULL, NULL);
-	err |= clEnqueueWriteBuffer(queue, mem_b, CL_TRUE, 0,
-								bytes, B, 0, NULL, NULL);
-
-	// Set the arguments to our compute kernel
-	err = clSetKernelArg(kernel, 0, sizeof(cl_mem), &mem_a);
-	err |= clSetKernelArg(kernel, 1, sizeof(cl_mem), &mem_b);
-	err |= clSetKernelArg(kernel, 2, sizeof(cl_mem), &mem_c);
-	err |= clSetKernelArg(kernel, 3, sizeof(unsigned int), &n);
-
-	// Execute the kernel over the entire range of the data set
-	err = clEnqueueNDRangeKernel(queue, kernel, 1, NULL, &globalSize, &localSize,
-								 0, NULL, NULL);
-
-	// Wait for the command queue to get serviced before reading back results
-	clFinish(queue);
-
-	// Read the results from the device
-	clEnqueueReadBuffer(queue, mem_c, CL_TRUE, 0,
-						bytes, C, 0, NULL, NULL);
-
-	//Sum up vector c and print result divided by n, this should equal 1 within error
-	double sum = 0;
-	for (i = 0; i < n; i++)
+	// Execute the kernel
+	size_t globalItemSize = SIZE * SIZE;
+	size_t localItemSize = 64; // globalItemSize has to be a multiple of localItemSize ex: 1024/64 = 16
+	for (int i = 0; i < 24; ++i)
 	{
-		printf("%f + %f = %f\n", A[i], B[i], C[i]);
-		sum += C[i];
+		ret = clEnqueueNDRangeKernel(commandQueue, kernel, 1, NULL, &globalItemSize, &localItemSize, 0, NULL, NULL);
 	}
-	printf("final result: %f\n", sum / n);
 
-	// release OpenCL resources
-	clReleaseMemObject(mem_a);
-	clReleaseMemObject(mem_b);
-	clReleaseMemObject(mem_c);
-	clReleaseProgram(program);
-	clReleaseKernel(kernel);
-	clReleaseCommandQueue(queue);
-	clReleaseContext(context);
+	// Read from device back to host.
+	ret = clEnqueueReadBuffer(commandQueue, bMemObj, CL_TRUE, 0, SIZE * SIZE * sizeof(float), B, 0, NULL, NULL);
 
-	//release host memory
+	clock_t opn_t2 = clock(); //taking end time of OpenCL execution
+	// printf("OpenCL Code: \n");
+	double openCl_time = showTimeDifference(opn_t1, opn_t2); //calculate time difference for OpenCl parallel executation
+	printf("OpenCL code execution finished!\n");
+
+	//Display matrix------------------------------------------------------
+	// displayMatrixOpenCL(A, B, C);
+
+	//write matrix into textfile------------------------------------------
+	// saveMatrixOpenCL(A, B, C);
+
+	//matrix validation----------------------------------------------------
+	checkValidity(A_seq, A, B, C);
+
+	//performance calculation----------------------------------------------
+	double speedUp = seq_time / openCl_time;
+	printf("Speed up: %.2f \n\n", speedUp);
+
+	// Clean up, release memory
+	ret = clFlush(commandQueue);
+	ret = clFinish(commandQueue);
+	ret = clReleaseCommandQueue(commandQueue);
+	ret = clReleaseKernel(kernel);
+	ret = clReleaseProgram(program);
+	ret = clReleaseMemObject(aMemObj);
+	ret = clReleaseMemObject(bMemObj);
+	ret = clReleaseMemObject(cMemObj);
+	ret = clReleaseContext(context);
 	free(A);
 	free(B);
 	free(C);

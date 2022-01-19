@@ -1,0 +1,47 @@
+##For Size = 2048:
+
+Sequential code start executing......
+========================= Time taken 1.0233 s ==========================
+
+Sequential code execution finished!
+Opencl code start executing......
+========================= Time taken 0.6569 s ==========================
+
+OpenCL code execution finished!
+Matrix validition Successful!
+
+Speed up: 1.56
+
+
+
+
+##For Size = 4096
+
+Sequential code start executing......
+========================= Time taken 4.0951 s ==========================
+
+Sequential code execution finished!
+Opencl code start executing......
+========================= Time taken 0.8587 s ==========================
+
+OpenCL code execution finished!
+Matrix validition Successful!
+
+Speed up: 4.77
+
+
+
+##For Size = 8192:
+
+Sequential code start executing......
+========================= Time taken 16.3822 s ==========================
+
+Sequential code execution finished!
+Opencl code start executing......
+========================= Time taken 1.2816 s ==========================
+
+OpenCL code execution finished!
+Matrix validition Successful!
+
+Speed up: 12.78
+
